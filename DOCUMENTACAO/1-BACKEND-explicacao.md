@@ -57,8 +57,7 @@ E existem as classes "de apoio":
 | `LivroRequest` | dto | O que o aplicativo **envia** (e as regras de validação) |
 | `LivroDTO` | dto | O que a API **devolve** |
 | `LivroMapper` | mapper | **Converte** entre Request, Entity e DTO |
-| `LivroNaoEncontradoException` | exception | Erro "livro não existe" |
-| `ApiExceptionHandler` | exception | Transforma erros em respostas JSON com o código certo |
+| `LivroNaoEncontradoException` | exception | Erro "livro não existe" (responde 404) |
 | `CargaInicial` | (raiz) | Cadastra os 4 livros quando o servidor liga |
 | `BibliotecaApplication` | (raiz) | O `main`, que liga tudo |
 
@@ -66,7 +65,7 @@ E existem as classes "de apoio":
 
 1. O app envia `{"titulo":"O Pequeno Príncipe","disponivel":true,"capa":"principe"}`.
 2. O **Controller** recebe, transforma o JSON em um `LivroRequest` e **valida** (`@Valid`).
-3. Se algo estiver errado, o **ApiExceptionHandler** responde **400** e o Service nem é chamado.
+3. Se algo estiver errado, o Spring responde **400** sozinho e o Service nem é chamado.
 4. Se estiver certo, o Controller chama o **Service**.
 5. O Service pede ao **Mapper** para transformar o `LivroRequest` em `Livro` (Entity).
 6. O Service pede ao **Repository** para **salvar** no banco. O banco cria o `id`.
@@ -78,7 +77,7 @@ E existem as classes "de apoio":
 1. O Controller recebe o `99` e chama `livroService.buscarPorId(99)`.
 2. O Service pede ao Repository `findById(99)`. O banco não tem esse livro.
 3. O Service **lança** `LivroNaoEncontradoException`.
-4. O `ApiExceptionHandler` "pega" essa exception e responde **404** com `{"erro":"Livro não encontrado com id: 99"}`.
+4. Como a exception tem `@ResponseStatus(HttpStatus.NOT_FOUND)`, o Spring responde **404**.
 
 ---
 
@@ -102,8 +101,7 @@ BACKEND
         ├── dto/LivroDTO.java
         ├── mapper/LivroMapper.java
         └── exception/
-            ├── LivroNaoEncontradoException.java
-            └── ApiExceptionHandler.java
+            └── LivroNaoEncontradoException.java
 ```
 
 ---
@@ -414,6 +412,7 @@ public class LivroController {
 ### 4.9 `exception/LivroNaoEncontradoException.java` — o erro personalizado
 
 ```java
+@ResponseStatus(HttpStatus.NOT_FOUND)
 public class LivroNaoEncontradoException extends RuntimeException {
 
     public LivroNaoEncontradoException(Long id) {
@@ -424,61 +423,14 @@ public class LivroNaoEncontradoException extends RuntimeException {
 
 | Trecho | Explicação |
 |---|---|
+| `@ResponseStatus(HttpStatus.NOT_FOUND)` | Quando esta exception sai do Controller, o Spring responde com o status **404**. |
 | `extends RuntimeException` | É um tipo de erro do Java. Esse tipo **não obriga** a escrever `try/catch` ou `throws` em todo lugar. |
 | Construtor com `Long id` | Recebe o id que não foi achado. |
 | `super("... " + id)` | Passa a **mensagem do erro** para a classe-mãe. Fica `Livro não encontrado com id: 99`. |
 
 ---
 
-### 4.10 `exception/ApiExceptionHandler.java` — o tratador de erros
-
-```java
-@RestControllerAdvice
-public class ApiExceptionHandler {
-
-    @ExceptionHandler(LivroNaoEncontradoException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public Map<String, String> tratarNaoEncontrado(LivroNaoEncontradoException ex) {
-        return Map.of("erro", ex.getMessage());
-    }
-
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public Map<String, String> tratarValidacao(MethodArgumentNotValidException ex) {
-        Map<String, String> erros = new LinkedHashMap<>();
-        ex.getBindingResult().getFieldErrors()
-                .forEach(erro -> erros.put(erro.getField(), erro.getDefaultMessage()));
-        return erros;
-    }
-
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public Map<String, String> tratarJsonInvalido(HttpMessageNotReadableException ex) {
-        return Map.of("erro", "JSON inválido ou campos com tipo errado");
-    }
-}
-```
-
-| Trecho | Explicação |
-|---|---|
-| `@RestControllerAdvice` | Esta classe **vigia todos os Controllers**. Quando alguma exception escapa, ela decide a resposta. |
-| `@ExceptionHandler(X.class)` | Este método trata **a exception do tipo X**. |
-| `@ResponseStatus(...)` | O código HTTP que será devolvido. |
-| `Map<String, String>` | Um mapa "chave → valor". O Spring transforma em JSON. |
-
-**Os três tratadores**
-
-1. **`tratarNaoEncontrado`** → **404**. Devolve `{"erro":"Livro não encontrado com id: 99"}`. `ex.getMessage()` é o texto que definimos na exception.
-2. **`tratarValidacao`** → **400**. Acontece quando o `@Valid` falha.
-   - `new LinkedHashMap<>()` cria o mapa de erros (mantém a ordem).
-   - `ex.getBindingResult().getFieldErrors()` lista os campos que falharam.
-   - `.forEach(erro -> erros.put(erro.getField(), erro.getDefaultMessage()))` coloca no mapa **campo → mensagem**. Exemplo: `{"titulo":"O título é obrigatório"}`.
-   - Se um campo falhar em mais de uma regra, o mapa guarda só uma mensagem para ele.
-3. **`tratarJsonInvalido`** → **400**. Acontece quando o JSON está quebrado ou tem tipo errado, por exemplo `"disponivel": "abc"`. Devolve `{"erro":"JSON inválido ou campos com tipo errado"}`.
-
----
-
-### 4.11 `CargaInicial.java` — os 4 livros iniciais
+### 4.10 `CargaInicial.java` — os 4 livros iniciais
 
 ```java
 @Component
@@ -514,7 +466,7 @@ Como o banco fica na memória e é recriado a cada início, **os 4 livros sempre
 
 ---
 
-### 4.12 `application.properties` — as configurações
+### 4.11 `application.properties` — as configurações
 
 ```properties
 server.port=8089
@@ -539,7 +491,7 @@ spring.jpa.open-in-view=false
 
 ---
 
-### 4.13 `pom.xml` — as bibliotecas (Maven)
+### 4.12 `pom.xml` — as bibliotecas (Maven)
 
 O Maven lê este arquivo e baixa as bibliotecas. As principais:
 
@@ -560,13 +512,13 @@ Versão do Spring Boot: **3.5.16**. Versão do Java configurada no projeto: **17
 |---|---|---|
 | 1 | `GET /livros` | 200, lista com os livros |
 | 2 | `GET /livros/1` | 200, o livro 1 |
-| 3 | `GET /livros/99` | 404, `{"erro":"Livro não encontrado com id: 99"}` |
+| 3 | `GET /livros/99` | 404 |
 | 4 | `POST` com dados válidos | 201, o livro criado com id |
-| 5 | `POST` com título vazio | 400, `{"titulo":"O título é obrigatório"}` |
-| 6 | `POST` sem `disponivel` | 400, `{"disponivel":"A disponibilidade é obrigatória"}` |
-| 7 | `POST` com capa `xyz` | 400, `{"capa":"Capa inválida. Use: aneis, harry, dom, orwel ou principe"}` |
+| 5 | `POST` com título vazio | 400 |
+| 6 | `POST` sem `disponivel` | 400 |
+| 7 | `POST` com capa `xyz` | 400 |
 
-Esses resultados foram conferidos rodando o servidor de verdade. Também foi conferido que um JSON com `"disponivel": "abc"` responde 400 com a mensagem de JSON inválido.
+Esses resultados foram conferidos rodando o servidor de verdade. Também foi conferido que um JSON com `"disponivel": "abc"` responde 400. O corpo das respostas de erro é o padrão do Spring (`timestamp`, `status`, `error`, `path`); o app só usa o código de status.
 
 **Como testar:**
 
@@ -602,8 +554,8 @@ Esses resultados foram conferidos rodando o servidor de verdade. Também foi con
 
 1. **Por que separar em Controller, Service e Repository?** Cada camada tem uma responsabilidade. O código fica organizado, fácil de achar e de explicar.
 2. **Por que usar DTO e não a Entity direto?** Para não expor o banco e para o cliente não mandar o `id`. A validação também fica no `LivroRequest`.
-3. **O que o `@Valid` faz?** Liga as regras do `LivroRequest`. Se alguma falhar, o Spring lança `MethodArgumentNotValidException` e o `ApiExceptionHandler` responde 400.
-4. **O que acontece se eu pedir um livro que não existe?** O Service lança `LivroNaoEncontradoException`, e o handler responde 404.
+3. **O que o `@Valid` faz?** Liga as regras do `LivroRequest`. Se alguma falhar, o Spring lança `MethodArgumentNotValidException` e responde 400 sozinho.
+4. **O que acontece se eu pedir um livro que não existe?** O Service lança `LivroNaoEncontradoException`, e o `@ResponseStatus` dela faz o Spring responder 404.
 5. **Por que 201 no POST?** 201 significa "criado". É o código correto quando um recurso novo é criado.
 6. **Os dados ficam salvos?** Não. O H2 está em memória; ao reiniciar, voltam só os 4 livros iniciais.
 7. **Por que a capa é só um texto?** O backend guarda só o código. A imagem fica dentro do app Android. Isso evita upload de imagens.

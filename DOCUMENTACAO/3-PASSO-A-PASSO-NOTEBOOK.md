@@ -175,7 +175,7 @@ http://localhost:8089/livros/1
 http://localhost:8089/livros/99
 ```
 
-O primeiro deve mostrar o livro 1. O segundo deve mostrar `{"erro":"Livro não encontrado com id: 99"}`.
+O primeiro deve mostrar o livro 1. O segundo deve responder com status 404 (Not Found).
 
 **Se o Backend estiver certo aqui, o Backend está pronto.** Deixe o IntelliJ rodando.
 
