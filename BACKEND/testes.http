@@ -1,0 +1,47 @@
+### 1. Listar todos os livros -> 200 (quatro livros iniciais)
+GET http://localhost:8089/livros
+
+### 2. Buscar livro existente -> 200
+GET http://localhost:8089/livros/1
+
+### 3. Buscar livro inexistente -> 404
+GET http://localhost:8089/livros/99
+
+### 4. Cadastrar com dados válidos -> 201 Created
+POST http://localhost:8089/livros
+Content-Type: application/json
+
+{
+  "titulo": "O Pequeno Príncipe",
+  "disponivel": true,
+  "capa": "principe"
+}
+
+### 5. Título vazio -> 400
+POST http://localhost:8089/livros
+Content-Type: application/json
+
+{
+  "titulo": "",
+  "disponivel": true,
+  "capa": "dom"
+}
+
+### 6. Sem disponibilidade -> 400
+POST http://localhost:8089/livros
+Content-Type: application/json
+
+{
+  "titulo": "Livro sem disponibilidade",
+  "capa": "dom"
+}
+
+### 7. Código de capa inexistente -> 400
+POST http://localhost:8089/livros
+Content-Type: application/json
+
+{
+  "titulo": "Livro com capa errada",
+  "disponivel": true,
+  "capa": "xyz"
+}
